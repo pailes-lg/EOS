@@ -1,0 +1,83 @@
+//Find the max date that has already been run in QV
+QVDDate:
+Load
+max(MaxExtractDate) as QVDDate
+FROM $(QVDs)\EOS\RunLog.qvd (qvd);
+
+let vMaxDateQVD = date(fieldvalue('QVDDate',1),'YYYY-MM-DD');
+//let vMaxDateIDQVD = year(vMaxDateQVD)*10000+month(vMaxDateQVD)*100+day(vMaxDateQVD);
+let vMaxDateIDQVD = year(vMaxDateQVD)&'-'&num(month(vMaxDateQVD),'00')&'-'&num(day(vMaxDateQVD),'00'); //the month and day need to come through as numbers, not '2020-May-6'
+//let vTodayID = year(today(1))*10000+month(today(1))*100+day(today(1));
+let vTodayID = year(today(1))&'-'&num(month(today(1)),'00')&'-'&num(day(today(1)),'00'); //the month and day need to come through as numbers, not '2020-May-6'
+
+//Calculate the max date available in the data
+MaxDateRaw:
+Load *;
+//02 +++++++   ORIGINAL BDA QUERY   +++++++
+// select max(a.dt) as max_date_raw from partner.eos_flat_events a
+//  where a.dt>='$(vMaxDateIDQVD)' and a.dt<'$(vTodayID)';
+//   +++++++   ORIGINAL BDA QUERY   +++++++
+
+//02 TESTED [AJ; 2020-04-23]
+select max(source_date) as max_date_raw
+from $(v_db_name).event360
+where source_date>='$(vMaxDateIDQVD)' and source_date <'$(vTodayID)';
+
+
+//No longer required //added var to rearrange max_date_raw into date format YYYY-MM-DD, otherwise comes through as numeric date code
+//let v_max_date_raw_date_format = date(fieldvalue('max_date_raw',1),'YYYY-MM-DD');
+
+//BDA format
+//let v_MaxDateRaw = date(left(fieldvalue('max_date_raw',1),4)&'-'&mid(fieldvalue('max_date_raw',1),5,2)&'-'&mid(fieldvalue('max_date_raw',1),7,2),'YYYY-MM-DD');
+
+//SDP format //no need for retrieving left and mid parts as already in YYYY-MM-DD format
+let v_MaxDateRaw = date(fieldvalue('max_date_raw',1),'YYYY-MM-DD');
+
+STORE MaxDateRaw INTO $(QVDs)\EOS\MaxDateRaw.qvd (qvd);
+drop table MaxDateRaw;
+
+//// Calculate dates to extract
+if v_ExtractAllNew = 1 then
+    OldRunLog:
+    LOAD max(MaxExtractDate) as MaxExtractDate
+    FROM $(QVDs)\EOS\RunLog.qvd (qvd);
+    let v_MinExtractDate = date(fieldvalue('MaxExtractDate',1)+1,'YYYY-MM-DD');
+    let v_MinExtractDate = date(if(v_MinExtractDate>v_MaxDateRaw,v_MaxDateRaw,v_MinExtractDate),'YYYY-MM-DD');
+    drop table OldRunLog;
+
+    v_MaxExtractDate = date(v_MaxDateRaw,'YYYY-MM-DD');
+
+else
+    if v_OverrideExtractDate = 1 and v_MaxExtractDate>0 then
+    v_MaxExtractDate = date(v_MaxExtractDate,'YYYY-MM-DD');
+    else
+    v_MaxExtractDate = date(v_MaxDateRaw,'YYYY-MM-DD');
+    end if
+
+    let v_MinExtractDate = date(v_MaxExtractDate - v_DaysToExtract + 1,'YYYY-MM-DD');
+
+end if
+
+//// Save extract dates to RunLog
+RunLog:
+LOAD RunDate,
+     MaxRawDate,
+     MaxExtractDate,
+     MinExtractDate
+FROM
+$(QVDs)\EOS\RunLog.qvd (qvd);
+
+RunLog:
+Load * Inline [
+RunDate, MaxRawDate, MaxExtractDate, MinExtractDate
+$(v_StartTime), $(v_MaxDateRaw), $(v_MaxExtractDate), $(v_MinExtractDate)
+];
+
+STORE RunLog INTO $(QVDs)\EOS\RunLog.qvd (qvd);
+drop table RunLog; //commented out to view in frontend
+
+let v_MinExtractDateID = year(v_MinExtractDate)*10000+month(v_MinExtractDate)*100+day(v_MinExtractDate);
+let v_MaxExtractDateID = year(v_MaxExtractDate)*10000+month(v_MaxExtractDate)*100+day(v_MaxExtractDate);
+
+let v_MaxExtractMonth = date(monthend(v_MaxExtractDate),'YYYY-MM-DD');
+let v_MinExtractMonth = date(monthend(AddMonths(v_MaxExtractDate,1-v_MonthsToExtract)),'YYYY-MM-DD');

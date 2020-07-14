@@ -1,0 +1,61 @@
+SET DateFormat='YYYY-MM-DD';
+SET TimeFormat='hh:mm';
+SET TimestampFormat='DD/MM/YYYY hh:mm';
+SET MoneyFormat='£#,##0.00;(£#,##0.00)';
+SET ThousandSep=','; 
+SET DecimalSep='.';
+SET MoneyThousandSep=',';
+SET MoneyDecimalSep='.';
+SET MonthNames='Jan;Feb;Mar;Apr;May;Jun;Jul;Aug;Sep;Oct;Nov;Dec';
+SET DayNames='Mon;Tue;Wed;Thu;Fri;Sat;Sun';
+
+
+//SDP Hive connection with QV user
+ODBC CONNECT TO SDP_HIVE (XUserId is QFIQXZFMBLYeVYRNWbdOA, XPassword is ASEJIDdGKJPGFAJJVaYQTZMMSCeCSQEV);
+
+//// Start time for Run Log
+let v_StartTime = Timestamp(now(1));
+
+//// Main database schema name
+let v_db_name = 'audience_measurement_repo';
+
+//// Database schema name for CNA maintained LOOKUP tables
+let v_db_name_lkp = 'audience_measurement_dev';
+
+////Subfolder name to store QVDs
+////PA added '\SDP' subfolder for testing
+set QVDs = "..\QVDs\SDP";
+
+//////////**************************************************//////////////////
+//01 NOTE: 1. ONLY CHANGED SCHEMA NAME, tested [AJ; 2020-04-22]
+LoadVariables:
+Load *;
+select a.active                as active
+     , a.extract_all_new       as extract_all_new
+     , a.days_to_extract       as days_to_extract
+     , a.months_to_extract     as months_to_extract
+     , a.override_extract_date as override_extract_date
+     , a.max_extract_date      as max_extract_date
+     , a.days_to_load          as days_to_load
+     , a.override_load_date    as override_load_date
+     , a.max_load_date         as max_load_date
+from $(v_db_name_lkp).qv_control_eos a
+where a.active=1;
+//////////////////////////////////////////////////////////////////////////////
+
+let vActive = fieldvalue('active',1);
+let v_ExtractAllNew = fieldvalue('extract_all_new',1);
+let v_DaysToExtract = fieldvalue('days_to_extract',1);
+let v_MonthsToExtract = fieldvalue('months_to_extract',1);
+let v_OverrideExtractDate = fieldvalue('override_extract_date',1);
+let v_MaxExtractDate = fieldvalue('max_extract_date',1);
+let v_DaysToLoad = fieldvalue('days_to_load',1);
+let v_OverrideLoadDate = fieldvalue('override_load_date',1);
+let v_MaxLoadDate = fieldvalue('max_load_date',1);
+
+drop table LoadVariables;
+
+//If there is no active record fail the load
+if vActive <> 1 then
+The statement will abort the load - no active control record;
+end if
